@@ -1,0 +1,58 @@
+name: PC Care Studio Windows
+on:
+  push:
+    branches: [pc-care-studio-1.0]
+    paths: ['pc-care/**', '.github/workflows/pc-care.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile WPF application
+        shell: cmd
+        run: pc-care\src\Build.cmd
+      - name: File safety and organizer tests
+        shell: pwsh
+        run: |
+          $p = Start-Process .\pc-care\src\PC-Care-Studio.exe -ArgumentList '--self-test' -Wait -PassThru
+          if ($p.ExitCode -ne 0) {
+            Get-Content .\pc-care\src\self-test-error.txt -ErrorAction SilentlyContinue
+            throw "Self-tests failed: $($p.ExitCode)"
+          }
+      - name: UI smoke test and screenshots
+        shell: pwsh
+        run: |
+          $p = Start-Process .\pc-care\src\PC-Care-Studio.exe -ArgumentList '--ui-test' -PassThru
+          if (-not $p.WaitForExit(60000)) { $p.Kill(); throw 'UI smoke test timed out' }
+          if ($p.ExitCode -ne 0) {
+            Get-Content .\pc-care\src\ui-test-error.txt -ErrorAction SilentlyContinue
+            throw "UI test failed: $($p.ExitCode)"
+          }
+          if (-not (Test-Path .\pc-care\src\screenshots\screen-0.png)) { throw 'No UI screenshot' }
+      - name: Compile self-contained installer payload
+        shell: pwsh
+        run: |
+          $fx = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319"
+          & "$fx\csc.exe" /nologo /codepage:65001 /target:winexe /platform:x64 /optimize+ /win32manifest:pc-care/src/app.manifest /out:pc-care/PC-Care-Studio-Setup.exe /reference:"$fx\System.Windows.Forms.dll" /reference:"$fx\System.Drawing.dll" /resource:pc-care/src/PC-Care-Studio.exe,PC-Care-Studio.exe /resource:pc-care/README-RU.txt,README-RU.txt pc-care/Setup.cs
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          Copy-Item pc-care/src/PC-Care-Studio.exe,pc-care/PC-Care-Studio-Setup.exe,pc-care/README-RU.txt,pc-care/LICENSE dist/
+          Get-ChildItem dist/*.exe | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } | Set-Content dist/SHA256SUMS.txt
+          Copy-Item pc-care/src/screenshots dist/screenshots -Recurse
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PC-Care-Studio-1.0-Windows-x64
+          path: dist/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: PC-Care-Studio-diagnostics
+          path: |
+            pc-care/src/*error.txt
+            pc-care/src/screenshots/
+          if-no-files-found: ignore
