@@ -1,0 +1,53 @@
+name: Build PC AI Studio Installer v1.1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - pcai-studio-installer-v11
+    paths:
+      - "pcai-installer-v11/**"
+      - ".github/workflows/build-pcai-studio-v11.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct payload
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force pcai-installer-v11\payload | Out-Null
+          $b64 = (Get-Content pcai-installer-v11\payload-*.b64 -Raw) -join ''
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\payload.zip",[Convert]::FromBase64String($b64))
+          $sha=(Get-FileHash "$env:RUNNER_TEMP\payload.zip" -Algorithm SHA256).Hash.ToLower()
+          if ($sha -ne "9d9f174b93521c3175e1897953f1a15a62d282320808e99661c773bbaabb68f5") { throw "Payload checksum mismatch: $sha" }
+          Expand-Archive "$env:RUNNER_TEMP\payload.zip" "$env:RUNNER_TEMP\payload" -Force
+          Copy-Item "$env:RUNNER_TEMP\payload\pcai_v11_payload\*" "pcai-installer-v11\payload" -Recurse -Force
+          if (!(Test-Path "pcai-installer-v11\payload\install.ps1")) { throw "install.ps1 missing" }
+          if (!(Test-Path "pcai-installer-v11\payload\server\app\main.py")) { throw "server missing" }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "pcai-installer-v11\PC_AI_Studio.iss"
+          if (!(Test-Path "pcai-installer-v11\out\PC_AI_Studio_Setup_v1.1_x64.exe")) { throw "Installer not created" }
+          Get-Item "pcai-installer-v11\out\PC_AI_Studio_Setup_v1.1_x64.exe" | Format-List Name,Length
+          Get-FileHash "pcai-installer-v11\out\PC_AI_Studio_Setup_v1.1_x64.exe" -Algorithm SHA256 | Format-List
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: PC-AI-Studio-Setup-v1.1
+          path: pcai-installer-v11/out/PC_AI_Studio_Setup_v1.1_x64.exe
+          if-no-files-found: error
+          retention-days: 30
