@@ -28,7 +28,7 @@ jobs:
         shell: cmd
         run: |
           if not exist out mkdir out
-          cl /nologo /O2 /MT /EHsc /std:c++17 PCAIOldRemoverNative\main.cpp /Fe:out\PCAI_Old_Version_Remover_Tiny.exe /link /SUBSYSTEM:WINDOWS shell32.lib advapi32.lib
+          cl /nologo /O2 /MT /EHsc /std:c++17 PCAIOldRemoverNative\main.cpp /Fe:out\PCAI_Old_Version_Remover_Tiny.exe /link /SUBSYSTEM:WINDOWS shell32.lib advapi32.lib user32.lib
 
       - name: Verify
         shell: pwsh
