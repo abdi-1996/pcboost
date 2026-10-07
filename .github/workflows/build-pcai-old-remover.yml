@@ -1,0 +1,44 @@
+name: Build PCAI Old Version Remover
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - pcai-old-remover
+    paths:
+      - "PCAIOldRemover/**"
+      - ".github/workflows/build-pcai-old-remover.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish single EXE
+        shell: pwsh
+        run: dotnet publish .\PCAIOldRemover\PCAIOldRemover.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o .\out
+
+      - name: Verify EXE
+        shell: pwsh
+        run: |
+          if (!(Test-Path ".\out\PCAI_Old_Version_Remover.exe")) { throw "EXE was not produced" }
+          Get-FileHash ".\out\PCAI_Old_Version_Remover.exe" -Algorithm SHA256 | Format-List
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCAI-Old-Version-Remover
+          path: out/PCAI_Old_Version_Remover.exe
+          if-no-files-found: error
+          retention-days: 30
