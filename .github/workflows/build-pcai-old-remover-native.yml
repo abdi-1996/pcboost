@@ -1,0 +1,48 @@
+name: Build Tiny PCAI Old Remover
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - pcai-old-remover
+    paths:
+      - "PCAIOldRemoverNative/**"
+      - ".github/workflows/build-pcai-old-remover-native.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build tiny native EXE
+        shell: cmd
+        run: >
+          cl /nologo /O2 /MT /EHsc /std:c++17 /DUNICODE /D_UNICODE
+          PCAIOldRemoverNative\main.cpp
+          /Fe:out\PCAI_Old_Version_Remover_Tiny.exe
+          /link /SUBSYSTEM:WINDOWS shell32.lib advapi32.lib
+
+      - name: Verify
+        shell: pwsh
+        run: |
+          if (!(Test-Path ".\out\PCAI_Old_Version_Remover_Tiny.exe")) { throw "EXE missing" }
+          Get-Item ".\out\PCAI_Old_Version_Remover_Tiny.exe" | Format-List Name,Length
+          Get-FileHash ".\out\PCAI_Old_Version_Remover_Tiny.exe" -Algorithm SHA256 | Format-List
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCAI-Old-Version-Remover-Tiny
+          path: out/PCAI_Old_Version_Remover_Tiny.exe
+          if-no-files-found: error
+          retention-days: 30
